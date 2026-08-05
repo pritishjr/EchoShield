@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.139.0",
+    "faster-whisper>=1.2.1",
     "loguru>=0.7.3",
     "pipecat-ai[cartesia,openai,silero,twilio]>=1.5.0",
     "pydantic>=2.13.4",
