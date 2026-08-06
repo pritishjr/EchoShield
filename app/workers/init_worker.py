@@ -42,7 +42,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
 
 import logging
-
+#separate logger for initializer.
 logger = logging.getLogger("worker.init")
 
 
