@@ -20,14 +20,19 @@ All of this happens per chunk inside a worker process concurrently
 
 from __future__ import annotations
 
+import os
+import io
+
 import logging
 import time
 from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
+import soundfile
 
-from app.redaction.patterns import redact_text
+from app.redaction.patterns import redaction_regex_patterns
+from app.core.config import settings
 
 logger = logging.getLogger("worker.transcribe")
 
@@ -75,11 +80,18 @@ class TranscriptionResult:
 # chunk every time. If your client instead sends a fully wav-encoded
 # blob per chunk, decode with soundfile.read() on a BytesIO buffer
 # here instead of the raw frombuffer call below.
-#
-# TODO: currently duplicated as a bare constant. Once config.py exists,
-# this should be sourced from Settings and threaded through initargs
-# the same way model_name/device/compute_type are in init_worker.py.
-SAMPLE_RATE = 16_000
+
+SAMPLING_RATE  = settings.SAMPLING_RATE
+def _decode_wav_blob(audio_bytes: bytes) -> np.ndarray:
+    #strips the 44 byte wav header
+    
+    audio_data, sample_rate = soundfile.read(io.BytesIO(audio_bytes), dtype="float32")
+
+    #ensure audio_data be 1D (for 1D input)
+    if audio_data.ndim > 1:
+        audio_data = audio_data.mean(axis = 1)
+    
+    return audio_data
 
 
 def _decode_pcm16(audio_bytes: bytes) -> np.ndarray:
@@ -135,7 +147,7 @@ def transcribe_and_redact(audio_bytes: bytes) -> TranscriptionResult:
             vad_filter=False,  # chunks are already pre-segmented by the caller
         )
         raw_text = " ".join(segment.text.strip() for segment in segments).strip() #extract raw text (stays in memory?)
-        redacted_text = redact_text(raw_text) #redact raw text
+        redacted_text = redaction_regex_patterns(raw_text) #redact raw text
 
         #high accuracy latency (run-time) computation using time (ms)
         duration_ms = (time.perf_counter() - start) * 1000
