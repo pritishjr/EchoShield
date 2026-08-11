@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     #local cache config:
     LOCAL_CACHE_SIZE = "1024MB"
     LOCAL_CACHE_MAX_SIZE = "1024MB"
-    LOCAL_CACHE_TTL_SECONDS = 3600
+    LOCAL_CACHE_TTL_SECONDS = 3600 
     
     #device config:
     DEVICE = "mps" #macOS gpu hardware acceleration
