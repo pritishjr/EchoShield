@@ -25,7 +25,7 @@ Scope and boundaries, explicitly:
     is safe under that assumption with no lock needed. If this cache
     is ever touched from a thread pool or from more than one
     event-loop thread, that assumption breaks and a lock must be
-    added — flagging this now so it isn't a silent bug later.
+    added.
 
 A note on cache correctness for a compliance product specifically:
 if the redaction patterns (or the model) ever change between deploys,
@@ -52,68 +52,59 @@ logger = logging.getLogger("cache.local")
 
 
 class LocalCache:
-    """
-    Bounded in-memory LRU cache with an optional TTL.
-
-    max_size: hard cap on entry count. The least-recently-accessed
-    entry is evicted first once the cap is hit — this bounds memory
-    on a long-running server without an external eviction process.
-    ttl_seconds: entries older than this are treated as a miss and
-    dropped on next access, even if the cache isn't full. None
-    disables time-based expiry (size-based eviction only).
-
-    Both bounds exist because they protect against different failure
-    modes: size alone protects memory but lets an entry live forever
-    if the cache never fills up; TTL alone doesn't protect memory
-    under a sudden burst of unique audio. Production traffic needs both.
-    """
-
+    #we are using two cache invalidation and eviction methods for this problem to get the best outcome: Bounded, in-memory LRU and TTL (optional).
     def __init__(self, max_size: int = 2048, ttl_seconds: Optional[float] = None):
         if max_size < 1:
             raise ValueError("max_size must be >= 1")
-        self._max_size = max_size
-        self._ttl_seconds = ttl_seconds
-        self._store: "OrderedDict[str, tuple[float, dict[str, Any]]]" = OrderedDict()
+        self._max_size = max_size #cache occupancy (2GB)
+        self._ttl_seconds = ttl_seconds #cache expiry
+        self._store: "OrderedDict[str, tuple[float, dict[str, Any]]]" = OrderedDict() #cache data type: ordered dictionary as a key,value tuple.
 
-    def get(self, key: str) -> Optional[dict[str, Any]]:
-        """
-        Returns the cached value, or None on a miss — including a miss
-        caused by expiry. A hit moves the entry to the
-        most-recently-used end.
-        """
-        entry = self._store.get(key) #O(1)
+    def __getitem__(self, key: str) -> Optional[dict[str, Any]]:
+        """Returns the value for the key. None if missing."""
+        entry = self._store.get(key) #O(1) operation
+        
+        #"entry" is a tuple
         if entry is None:
             return None
-
+        
+        #extract dimensions:
         inserted_at, value = entry
-        if self._is_expired(inserted_at):
+        
+        #removing (invalidating) cache based on TTL(optional)
+        self.check_cache = self._is_expired(inserted_at)
+        
+        if self.check_cache:
             # Cleaned up lazily, on access, rather than via a background
             # sweep — simpler, and sufficient at MVP scale. A background
             # reaper is a reasonable post-MVP addition if profiling ever
             # shows dead entries accumulating between accesses.
-            del self._store[key]
+            
+            del self._store[key] #invalidating the tuple
             logger.debug("local cache expired: %s", key)
             return None
 
-        self._store.move_to_end(key)
+        #marking as recently-used. (last is )
+        self._store.move_to_end(key) #reordering in O(1)
         return value
-  
-    def set(self, key: str, value: dict[str, Any]) -> None:
+
+    def __setitem__(self, key: str, value: dict[str, Any]) -> None:
         """
-        Inserts or overwrites an entry, evicting the least-recently-used
-        entry first if the cache is already at max_size.
+        Inserts or overwrites an entry in cache. Evicts if the cache capacity hits maximum occupancy (_max_size) based on LRU approach.
         """
         if key in self._store:
-            self._store.move_to_end(key)
+            self._store.move_to_end(key) #moving it at the end of the stack.
         self._store[key] = (time.monotonic(), value)
 
         if len(self._store) > self._max_size:
-            evicted_key, _ = self._store.popitem(last=False)
+            evicted_key, _ = self._store.popitem(last=False) # O(1) bidirectional eviction:(first is the least recently-used/ oldest)
             logger.debug("local cache evicted (over capacity): %s", evicted_key)
 
+    #returns the length (size) of the current size of cache (out of the _max_size)
     def __len__(self) -> int:
         return len(self._store)
 
+    #checks if the cache address(key) value is expired or not:
     def _is_expired(self, inserted_at: float) -> bool:
         if self._ttl_seconds is None:
             return False
