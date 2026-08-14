@@ -34,7 +34,7 @@ import logging
 from typing import Any
 
 from app.cache import redis_cache
-from app.cache.hashing import hash_audio  # ASSUMED name/signature — confirm against your file.
+from app.cache.hashing import audio_hash
 from app.cache.local_cache import LocalCache
 from app.core.config import settings
 from app.workers import pool
@@ -43,16 +43,12 @@ from app.workers.transcribe import AudioDecodeError, TranscriptionResult, transc
 logger = logging.getLogger("services.pipeline")
 
 
-# Bump this any time redaction/patterns.py's matching rules change, or
-# the transcription model changes in a way that alters output. Doing
-# so changes every key computed from this point forward, so old
-# entries are simply never read again — they just age out via TTL/LRU
-# instead of an operator needing to remember to flush Redis on deploy.
-# Deliberately a code constant, not a settings value: it should change
-# WITH a code change to patterns.py, not be independently configurable.
-CACHE_KEY_VERSION = "v1"
+CACHE_KEY_VERSION = "v1" #unchanged unredacted audio chunk.
+#v2 becomes the redacted audio chunk final transcription which is picked by the processpoolexecutor.
+#structure of a cache key: {audio_hash}:{model_name}:{v1}
+#no need to flush the redis cache deploy manually when there is a independent change in the redaction functions or the transcription model itself.
 
-
+#facade exception which collects all the low-level ERRORS which must be handled this banner. (else we would have to handle all of them independently.)
 class PipelineError(Exception):
     """
     Raised when a chunk cannot be processed — either the audio itself
@@ -62,31 +58,19 @@ class PipelineError(Exception):
     failure was a bad decode, an empty chunk, or something unexpected
     inside a worker.
     """
+    pass
+#-----
 
-
-# Instantiated directly at import time — NOT via a create_/get_
-# singleton pair like workers/pool.py or cache/redis_cache.py use.
-# Deliberate difference: LocalCache acquires no external resource (no
-# process to spawn, no socket to open); it's a plain in-memory object,
-# so there's nothing for a startup/shutdown hook to actually
-# coordinate. The singleton-with-lifecycle pattern earns its keep only
-# when there's a real resource to create once and tear down cleanly —
-# applying it here too "for consistency" would just be ceremony.
-#
-# ASSUMED settings fields: LOCAL_CACHE_MAX_SIZE, LOCAL_CACHE_TTL_SECONDS.
+#instantiating the local cache object which does not dependent on any external modules outside the eventloop
 _local_cache = LocalCache(
     max_size=settings.LOCAL_CACHE_MAX_SIZE,
     ttl_seconds=settings.LOCAL_CACHE_TTL_SECONDS,
 )
 
-# Holds references to fire-and-forget Redis-write tasks so asyncio
-# doesn't garbage-collect them mid-flight — a well-known asyncio trap:
-# a Task with no remaining reference can be destroyed before it
-# completes, silently dropping the write with only a "Task was
-# destroyed but it is pending" warning to show for it.
+#stores all the bg tasks garbage (asynchronous asyncio.Task references) in a set.
 _background_tasks: set[asyncio.Task] = set()
 
-
+#Asynchronously process the input audio chunk
 async def process_chunk(audio_bytes: bytes) -> TranscriptionResult:
     """
     The single entry point the WebSocket layer calls per chunk.
@@ -94,14 +78,13 @@ async def process_chunk(audio_bytes: bytes) -> TranscriptionResult:
     or a fresh worker computation — callers don't need to care which.
     """
     try:
-        audio_hash = hash_audio(audio_bytes)
+        hashed_audio = audio_hash(audio_bytes)
     except ValueError as exc:
-        # Empty/degenerate chunk. Fail this one chunk, not the whole
-        # connection — a single malformed frame shouldn't take down an
-        # otherwise-healthy WebSocket stream.
+        # Empty/degenerate chunk. Fail this one chunk only.
+        # WebSocket connection is still healthy.
         raise PipelineError(f"cannot process chunk: {exc}") from exc
 
-    key = _cache_key(audio_hash)
+    key = _cache_key(hashed_audio)
 
     tier1_hit = _local_cache.get(key)
     if tier1_hit is not None:
@@ -124,7 +107,7 @@ async def process_chunk(audio_bytes: bytes) -> TranscriptionResult:
     return result
 
 
-def _cache_key(audio_hash: str) -> str:
+def _cache_key(hashed_audio: str) -> str:
     """
     Composes the real cache key from the raw audio hash plus a version
     component. Both cache tiers only ever see THIS string — never the
@@ -132,7 +115,7 @@ def _cache_key(audio_hash: str) -> str:
     invalidates old entries automatically rather than needing a manual
     cache flush on deploy.
     """
-    return f"{audio_hash}:{settings.n}:{CACHE_KEY_VERSION}"
+    return f"{hashed_audio}:{settings.MODEL_NAME}:{CACHE_KEY_VERSION}"
 
 
 async def _run_in_pool(audio_bytes: bytes) -> TranscriptionResult:
