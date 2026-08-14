@@ -7,7 +7,7 @@ app/cache/redis_cache.py
 Tier 2 of the two-tier cache: a shared, external cache so a hit in
 one server process/replica is visible to every other one. Where
 LocalCache (Tier 1) only helps a single process avoid re-transcribing
-audio IT personally has seen, this tier saves work across the whole
+audio it personally has seen, this tier saves work across the whole
 fleet — e.g. the same hold-music clip arriving on two connections
 handled by two different uvicorn worker processes.
 
@@ -37,6 +37,7 @@ import json
 import logging
 from typing import Any, Optional
 
+#redis imports
 import redis.asyncio as redis
 from redis.exceptions import RedisError
 
@@ -44,30 +45,17 @@ from app.core.config import settings
 
 logger = logging.getLogger("cache.redis")
 
+#lazy initializating the redis client:
 _client: Optional["redis.Redis"] = None
 
-
+#initialization is synchronous:
 def create_redis_client() -> "redis.Redis":
     """
-    Builds the single, process-wide async Redis client. Called once
-    from app startup (lifespan.py), mirroring workers/pool.py's
-    create_pool()/get_pool() pattern for consistency across the
-    codebase.
-
-    redis.asyncio.Redis manages its own internal connection pool, so
-    "one client for the app's lifetime" is the correct shape — there
-    is no benefit to opening a fresh connection per request.
-
-    Deliberately asymmetric with pool.py's create_pool(): that
-    function warms up workers and FAILS STARTUP if model loading
-    breaks, because a worker pool with no model is useless. This
-    function does NOT ping Redis or block startup on connectivity,
-    because — per this module's whole design — a missing cache is
-    degraded performance, not a broken system. If Redis happens to be
-    down when the app boots, get()/set() below already handle that
-    per-call; there's no reason to also refuse to start.
+    builds the one-and-only single, wide across all processes- Redis Client that boots up alongside the worker-processes pool.
+    The main objective of this is to program the guardrails in case of a server shotage using get() and set() functions.
     """
     global _client
+    #make sure only one redis client is active
     if _client is not None:
         raise RuntimeError(
             "create_redis_client() called but a client already exists — "
@@ -76,14 +64,14 @@ def create_redis_client() -> "redis.Redis":
 
     logger.info("creating redis client: %s", settings.REDIS_URL)
     _client = redis.from_url(
-        settings.REDIS_URL,
+        settings.REDIS_URL, #database port
         decode_responses=True,       # get back str, not bytes, from redis-py
         socket_connect_timeout=2.0,  # fail fast per-call rather than hang the event loop
         socket_timeout=2.0,
     )
     return _client
 
-
+#to check whether client is up and active (synchronous)
 def get_redis_client() -> "redis.Redis":
     """Accessor used by get()/set() below. Raises if called before startup."""
     if _client is None:
@@ -93,7 +81,9 @@ def get_redis_client() -> "redis.Redis":
         )
     return _client
 
+#BEHAVOIURS ARE ALWAYS ASYNCHRONOUS
 
+#to close all the active connections with the pool due to server shutdown.
 async def close_redis_client() -> None:
     """Called once, from lifespan teardown, on server shutdown."""
     global _client
@@ -101,21 +91,20 @@ async def close_redis_client() -> None:
         logger.warning("close_redis_client() called but no client exists — no-op")
         return
 
+    #why async?
     await _client.aclose()
     _client = None
 
-
+#to fetch the value for a key:
+#it is asynchronous since the signal is a network i/0 (outbound)
 async def get(key: str) -> Optional[dict[str, Any]]:
     """
-    Returns the cached value, or None on a miss — including a "miss"
-    caused by Redis being unreachable. Callers cannot distinguish
-    "never cached" from "cache unavailable right now" and are not
-    meant to: both cases have the identical correct response, which
-    is to fall through to a real transcription.
+    Returns the cached value or None or a "miss"
     """
+    #initialize client
     client = get_redis_client()
     try:
-        raw = await client.get(key)
+        raw = await client.get(key) #fetches data
     except RedisError:
         logger.warning(
             "redis GET failed for key=%s — treating as cache miss", key, exc_info=True
@@ -125,6 +114,7 @@ async def get(key: str) -> Optional[dict[str, Any]]:
     if raw is None:
         return None
 
+    #treating cache miss
     try:
         return json.loads(raw)
     except (json.JSONDecodeError, TypeError):
@@ -134,20 +124,11 @@ async def get(key: str) -> Optional[dict[str, Any]]:
         logger.warning("redis value for key=%s was not valid JSON — treating as cache miss", key)
         return None
 
-
+#to write a value to a cache key.
 async def set(key: str, value: dict[str, Any], ttl_seconds: Optional[int] = None) -> None:
     """
-    Stores value under key with an expiry. ttl_seconds defaults to
-    settings.CACHE_TTL_SECONDS when not given explicitly, so most call
-    sites don't have to think about it — callers that DO know a
-    different lifetime is correct for a particular entry (e.g. a
-    low-confidence transcription that should expire sooner) can
-    override it per call.
-
-    Failure here is logged and swallowed, not raised: losing a cache
-    write means the next identical chunk gets fully re-transcribed
-    instead of served from cache — a performance cost, not a
-    correctness problem, and not worth failing the current request over.
+    stores the value to the address/key.
+    checks whether the ttl seconds is mentioned else the default is the pre-deteremined config file global constant.
     """
     client = get_redis_client()
     ttl = ttl_seconds if ttl_seconds is not None else settings.REDIS_TTL_SECONDS
