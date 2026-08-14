@@ -64,9 +64,7 @@ class TranscriptionResult:
 
     `redacted_text` is the only field safe to forward to the client.
     `raw_text` is included for server-side audit/QA logging only —
-    it still contains unredacted PII, and it is the responsibility of
-    services/pipeline.py (not this module) to make sure raw_text never
-    reaches the WebSocket output.
+    it still contains unredacted PII.
     """
     redacted_text: str
     raw_text: str
@@ -74,18 +72,14 @@ class TranscriptionResult:
     error: Optional[str] = None
 
 
-# --- audio decoding assumption ---------------------------------------
-# The client (scripts/simulate_client.py) streams raw, headerless
-# PCM16LE mono samples at SAMPLE_RATE per chunk — not a wav-wrapped
-# chunk every time. If your client instead sends a fully wav-encoded
-# blob per chunk, decode with soundfile.read() on a BytesIO buffer
-# here instead of the raw frombuffer call below.
-
-SAMPLING_RATE  = settings.SAMPLING_RATE
+#incase input is a non-header-less, wrapped (wav) file, decode using this function.
 def _decode_wav_blob(audio_bytes: bytes) -> np.ndarray:
-    #strips the 44 byte wav header
+    """strips the 44 byte wav header off to extract the audio data."""
     
     audio_data, sample_rate = soundfile.read(io.BytesIO(audio_bytes), dtype="float32")
+    
+    #extract the true sample-rate:
+    sample_rate = sample_rate if sample_rate is not None else settings.SAMPLING_RATE
 
     #ensure audio_data be 1D (for 1D input)
     if audio_data.ndim > 1:
@@ -111,12 +105,8 @@ def transcribe_and_redact(audio_bytes: bytes) -> TranscriptionResult:
       2. Transcribe using the model this worker loaded at startup.
       3. Redact PII from the resulting text.
       4. Return a picklable result.
-
-    Per-chunk failures are CAUGHT and returned via the `error` field,
-    never raised. A single malformed or silent chunk must not kill
-    this worker process — that would shrink pool capacity and force
-    a respawn mid-stream. Fatal failure is reserved for init_worker's
-    model-load step only; once a worker is alive, it stays alive.
+      
+    a silent or flawed chunk must be caught and passed through the error field (logger) not raised! else this would halt/kill the process from the worker pool (unlike the case of handling when the model fails to load). we want all the processes to be up and running at all times.
     """
     start = time.perf_counter() #for run-time calculations
 
@@ -168,6 +158,12 @@ def transcribe_and_redact(audio_bytes: bytes) -> TranscriptionResult:
             error=str(exc),
         )
         
+class AudioDecodeError(Exception):
+    """Raised when the audio bytes cannot be decoded due to corrupt connection or any other potential """
+    
+    #why are we returning pass?
+    #this is a custom exception function which can be called to mark an exception in the case of audio chunk not able to 
+    pass
 
 #so <transcribe_and_redact> returns a TranscriptionResult data object that stores not only the redacted text but also the raw text. (see notes)
 #this is for server-side quality assurance and auditing purposes. this data must complly with certain data security compliances.
