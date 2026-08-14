@@ -71,10 +71,10 @@ class LocalCache:
         #extract dimensions:
         inserted_at, value = entry
         
-        #removing (invalidating) cache based on TTL(optional)
-        self.check_cache = self._is_expired(inserted_at)
-        
-        if self.check_cache:
+        # removing (invalidating) cache based on TTL (optional)
+        is_expired = self._is_expired(inserted_at)
+
+        if is_expired:
             # Cleaned up lazily, on access, rather than via a background
             # sweep — simpler, and sufficient at MVP scale. A background
             # reaper is a reasonable post-MVP addition if profiling ever
@@ -92,12 +92,27 @@ class LocalCache:
         """
         Inserts or overwrites an entry in cache. Evicts if the cache capacity hits maximum occupancy (_max_size) based on LRU approach.
         """
+        now = time.monotonic()
         if key in self._store:
-            self._store.move_to_end(key) #moving it at the end of the stack.
-        self._store[key] = (time.monotonic(), value)
+            # keep ordering semantics: mark as recently used
+            self._store.move_to_end(key)
+        self._store[key] = (now, value)
 
+        # If over capacity, first try to remove any expired entries (lazy reaping)
         if len(self._store) > self._max_size:
-            evicted_key, _ = self._store.popitem(last=False) # O(1) bidirectional eviction:(first is the least recently-used/ oldest)
+            expired_keys: list[str] = []
+            for k, (inserted_at, _) in list(self._store.items()):
+                if self._is_expired(inserted_at):
+                    expired_keys.append(k)
+                    if len(self._store) - len(expired_keys) <= self._max_size:
+                        break
+            for k in expired_keys:
+                self._store.pop(k, None)
+                logger.debug("local cache expired during set: %s", k)
+
+        # If still over capacity, evict least-recently-used items.
+        while len(self._store) > self._max_size:
+            evicted_key, _ = self._store.popitem(last=False)
             logger.debug("local cache evicted (over capacity): %s", evicted_key)
 
     #returns the length (size) of the current size of cache (out of the _max_size)
