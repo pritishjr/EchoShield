@@ -104,7 +104,7 @@ async def process_chunk(audio_bytes: bytes) -> TranscriptionResult:
     _local_cache.set(key, entry)
     _fire_and_forget(redis_cache.set(key, entry))
 
-    return result
+    return result #returns a TranscriptionResult object
 
 
 def _cache_key(hashed_audio: str) -> str:
@@ -133,10 +133,6 @@ async def _run_in_pool(audio_bytes: bytes) -> TranscriptionResult:
         logger.warning("audio decode failed for chunk: %s", exc)
         raise PipelineError(f"could not decode audio chunk: {exc}") from exc
     except Exception as exc:
-        # Anything else is unexpected — a real bug inside the worker,
-        # not a "normal" bad-input case. Logged more loudly than the
-        # AudioDecodeError branch above so the two are easy to tell
-        # apart when scanning logs.
         logger.exception("unexpected worker failure")
         raise PipelineError("transcription failed unexpectedly") from exc
 
