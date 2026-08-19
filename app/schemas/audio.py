@@ -1,45 +1,22 @@
 
-    
 """
 app/schemas/audio.py
 
-The wire contract for this WebSocket endpoint: the exact, deliberate
-shape of every message the server sends to a client. Nothing in this
-file talks to audio, models, or caches — its only job is to define
-what's allowed to cross the network boundary, and how.
+Only job is to make sure and decide:
+- whether the shape of the response sent from the server to the client is precise. to see what's allowed to pass over from the network.
 
-Why this exists as a layer separate from workers/transcribe.py's
-TranscriptionResult:
+The issue we are trying to solve:
+- TranscriptionResult data object is rather internal (jumps across the worker boundary with variable shape as needs be.)
+- Therefore, there is no divide between what the client recieves and the internal structure when manually edited, and so any change would automatically appear in the client-facing JSON whether desirable or not.
 
-TranscriptionResult is an INTERNAL type. Its shape is driven by what a
-worker process happens to compute, and by what needs to survive a
-pickle round-trip across a process boundary (see its own docstring).
-Those are implementation concerns — not the same question as "what
-are we willing to promise an external client this field will always
-mean." Serializing TranscriptionResult directly onto the wire (e.g.
-via dataclasses.asdict()) silently welds the two together: any field
-added to TranscriptionResult later for an internal/debugging reason
-would automatically start appearing in client-facing JSON, whether or
-not anyone actually decided that was safe or desirable to expose.
-TranscriptResponse.from_result() below is the one deliberate seam
-where that translation happens — adding a field to TranscriptionResult
-does NOT put it on the wire until someone explicitly adds it here too.
+TranscriptResponse changes this.
+- returns a message for a successful transcript or an error. basically relays what information the client can expect (Literal[...]).
+- Pydantic's discriminated unions use that field to pick the right model
+automatically.
+- matters most when the input is more than just bytes (raw binary)- specifying a format/sampling rate, .etc. 
+- uses the same shape already set. 
 
-Why a discriminated union, not "just send whatever dict shape fits":
-
-This endpoint emits more than one kind of message — a successful
-transcript, or an error for a chunk that failed. A client parsing
-these needs a reliable way to tell them apart before it knows which
-shape to expect; that's what the `type` literal field is for.
-Pydantic's discriminated unions use that field to pick the right model
-automatically. That matters most on a READ path (validating an
-incoming heterogeneous message), which this protocol doesn't have yet
-— today the client only ever sends raw binary, no JSON. But it's worth
-establishing the pattern now: if this protocol ever needs to validate
-something the client sends (e.g. a handshake message before the
-binary stream starts, declaring sample rate or format), this file is
-exactly where that model gets added, using the same shape already set
-up here.
+this file serves (or channels) the required output via the TranscriptResponse. we can also change it explicitly.
 """
 
 from __future__ import annotations
@@ -52,35 +29,9 @@ from app.workers.transcribe import TranscriptionResult
 
 
 class TranscriptResponse(BaseModel):
-    """
-    Sent for every chunk that was transcribed successfully — whether
-    the result came from a fresh worker computation, a Tier 1 hit, or
-    a Tier 2 hit. The client cannot tell which path produced it, and
-    doesn't need to.
 
-    Field selection here is a deliberate SUBSET of TranscriptionResult,
-    not an automatic mirror of it:
-      - redacted_text, language, is_silent: what a UI needs to render
-        a live transcript.
-      - redaction_count: not needed to render text, but cheap to
-        expose and genuinely useful downstream — a compliance
-        dashboard can sum this across a call to show "N items
-        redacted" without the backend needing a new field or endpoint
-        later.
-      - duration_ms: kept because it's a legitimate client-side
-        latency signal, AND because on a cache hit it will be exactly
-        0.0 by construction (see TranscriptionResult's docstring) —
-        genuinely informative, not internal noise.
-
-    If TranscriptionResult ever grows a field that's purely an
-    internal/debugging concern (which cache tier served this, a
-    worker's PID, a raw pre-redaction confidence score), the right
-    move is to NOT add it here. from_result() below is exactly where
-    that inclusion/exclusion decision gets made explicitly, once —
-    rather than by omission inside a generic serializer that has no
-    opinion either way.
-    """
-
+    #field selection could be arbitrary based on the client's expectation rather than internalized selection.
+    
     type: Literal["transcript"] = "transcript"
     redacted_text: str
     redaction_count: int
