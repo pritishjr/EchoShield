@@ -32,6 +32,7 @@ import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.services.pipeline import PipelineError, process_chunk
+from app.schemas.audio import TranscriptResponse, ErrorResponse
 logger = logging.getLogger("api.websocket")
 
 router = APIRouter()
@@ -62,13 +63,17 @@ async def audio_websocket_stream(websocket: WebSocket) -> None:
                 logger.warning("chunk failed: %s", exc)
                 
                 #send error data back to the client:
-                await websocket.send_json({"type": "error", "message": str(exc)})
+                # await websocket.send_json({"type": "error", "message": str(exc)})
+                await websocket.send_json(ErrorResponse(message=str(exc)).model_dump())
                 continue
 
-            payload = {"type": "transcript", **dataclasses.asdict(result)}
+            # payload = {"type": "transcript", **dataclasses.asdict(result)}
             
-            #send the redacted audio back.
-            await websocket.send_json(payload)
+            #creating a TranscriptResponse object and extracting the result:
+            response = TranscriptResponse.from_result(result)
+            
+            #send the redacted audio back. (model dump generates a dict of the model)
+            await websocket.send_json(response.model_dump())
 
     except WebSocketDisconnect:
         logger.info("client disconnected")
