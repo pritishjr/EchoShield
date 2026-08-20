@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 
 from app.workers.transcribe import TranscriptionResult
 
-
+#schema1
 class TranscriptResponse(BaseModel):
 
     #field selection could be arbitrary based on the client's expectation rather than internalized selection.
@@ -42,37 +42,25 @@ class TranscriptResponse(BaseModel):
     @classmethod
     def from_result(cls, result: TranscriptionResult) -> "TranscriptResponse":
         """
-        The one place TranscriptionResult -> wire-format translation
-        happens. Deliberately explicit, field by field — not
-        cls(**dataclasses.asdict(result)). The entire point of this
+        TranscriptionResult -> wire-format translation. The entire point of this
         class existing is that the internal and external shapes are
         ALLOWED to diverge; an automatic unpack would quietly undo
         that protection the moment the two shapes actually do drift.
         """
         return cls(
             redacted_text=result.redacted_text,
-            redaction_count=result.redaction_count,
             language=result.language,
             duration_ms=result.duration_ms,
             is_silent=result.is_silent,
         )
 
-
+#the connection must stay open even after a failed processing.
+#schema2
 class ErrorResponse(BaseModel):
     """
     Sent for a chunk that failed processing (see PipelineError in
     services/pipeline.py). The connection stays open after this — it's
     a per-chunk error, not a connection-level one.
-
-    `message` is TRUSTED to already be client-safe by the time it
-    reaches this model — this class does not sanitize it. That
-    responsibility lives in services/pipeline.py, which constructs
-    PipelineError with descriptive-but-safe text (e.g. "could not
-    decode audio chunk: ...") rather than forwarding a raw internal
-    exception string. That's an assumption this file leans on, not one
-    it enforces: if pipeline.py's error branches are ever changed to
-    include raw internals "for debuggability," this model would
-    faithfully — and wrongly — ship that straight to the client.
     """
 
     type: Literal["error"] = "error"
@@ -80,14 +68,8 @@ class ErrorResponse(BaseModel):
 
     pass
 
-# Every message this endpoint can send, tagged for automatic
-# discrimination on the `type` field. Used today mainly as a single
-# source of truth for "what can this endpoint emit" — useful for
-# tests, and for generating client-side types later. It becomes
-# directly load-bearing (i.e. actually used to validate/parse,
-# not just document) the moment this file gains an incoming-message
-# model that needs the same discrimination on a read path.
+
 AudioStreamMessage = Annotated[
-    Union[TranscriptResponse, ErrorResponse],
-    Field(discriminator="type"),
+    Union[TranscriptResponse, ErrorResponse], # a websocket response will eaither conform to a TranscriptResponse schmea or ErrorRespomns schema
+    Field(discriminator="type"), 
 ]
