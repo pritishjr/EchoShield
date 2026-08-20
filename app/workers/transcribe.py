@@ -70,6 +70,8 @@ class TranscriptionResult:
     raw_text: str
     duration_ms: float
     error: Optional[str] = None
+    language: str | None
+    is_silent: bool
 
 
 #incase input is a non-header-less, wrapped (wav) file, decode using this function.
