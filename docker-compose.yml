@@ -1,0 +1,48 @@
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../.env
+    environment:
+      MODEL_NAME: ${MODEL_NAME}
+      DEVICE: ${DEVICE}
+      COMPUTE_TYPE: ${COMPUTE_TYPE}
+      POOL_WORKERS: ${POOL_WORKERS}
+      REDIS_URL: redis://redis:6379/0
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS}
+      LOCAL_CACHE_MAX_SIZE: ${LOCAL_CACHE_MAX_SIZE}
+      LOCAL_CACHE_TTL_SECONDS: ${LOCAL_CACHE_TTL_SECONDS}
+      LOG_LEVEL: ${LOG_LEVEL}
+
+    #the default for docker /dev/shm is 64MB (out of the RAM) which is insufficient for heavy CPU-bound downstream tasks (backend of Whisper - CTranslate2). gives OOM-Error otherwise. manually writing the shm size.
+    shm_size: "1gb"
+
+    volumes: #to cache the model weights from hf to avoid re-downloading.
+      - whisper-model-cache:/home/appuser/.cache/huggingface
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports: #not required in production (app takes care of it via docker) but ok
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    volumes: #optional
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+volumes:
+  whisper-model-cache:
+  redis-data:
