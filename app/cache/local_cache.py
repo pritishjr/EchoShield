@@ -54,8 +54,7 @@ logger = logging.getLogger("cache.local")
 class LocalCache:
     #we are using two cache invalidation and eviction methods for this problem to get the best outcome: Bounded, in-memory LRU and TTL (optional).
     def __init__(self, max_size: int = 2048, ttl_seconds: Optional[float] = None):
-        if max_size < 1:
-            raise ValueError("max_size must be >= 1")
+        assert max_size >= 1, "max_size must be >= 1"
         self._max_size = max_size #cache occupancy (2GB)
         self._ttl_seconds = ttl_seconds #cache expiry
         self._store: "OrderedDict[str, tuple[float, dict[str, Any]]]" = OrderedDict() #cache data type: ordered dictionary as a key,value tuple.
