@@ -9,16 +9,20 @@ class Settings(BaseSettings):
     #validating data types into python objects
     
     #Project INFO:
-    PROJECT_NAME = "Echoshield"
+    PROJECT_NAME: str = "Echoshield"
     DEBUG: bool = False
+    LOG_LEVEL: str = "INFO"
     
     #configuring multiprocessing:
     #my mac has 8 cores of cpu
-    WORKER_POOL_SIZE: int = Field(default=8, ge=1, le=16)
+    POOL_WORKERS: int | None = Field(default=None, ge=1, le=16)
     
     #redis cache config:
     REDIS_URL: RedisDsn = "redis://localhost:6379/0"
-    REDIS_TTL_SECONDS: int = 3600  # Cache audio transcriptions for 1 hour
+    REDIS_TTL_SECONDS: int = Field(
+        default=3600,
+        validation_alias="CACHE_TTL_SECONDS",
+    )  # Cache audio transcriptions for 1 hour
     
     # Pydantic v2 config for loading the .env file
     model_config = SettingsConfigDict(
@@ -28,18 +32,18 @@ class Settings(BaseSettings):
     )
     
     #model:
-    MODEL_NAME = "whisper-tiny"
+    MODEL_NAME : str = "whisper-tiny"
     
     #local cache config:
-    LOCAL_CACHE_SIZE = "1024MB"
-    LOCAL_CACHE_MAX_SIZE = "1024MB"
-    LOCAL_CACHE_TTL_SECONDS = 3600 
+    LOCAL_CACHE_SIZE: int = 1024
+    LOCAL_CACHE_MAX_SIZE : int = 1024
+    LOCAL_CACHE_TTL_SECONDS : int = 3600 
     
     #device config:
-    DEVICE = "mps" #macOS gpu hardware acceleration
-    COMPUTE_TYPE = "float32"
+    DEVICE : str = "mps" #macOS gpu hardware acceleration
+    COMPUTE_TYPE : str = "float32"
     
     #sampling rate:
-    SAMPLING_RATE = 16000
+    SAMPLING_RATE : int = 16000
     
 settings = Settings()
