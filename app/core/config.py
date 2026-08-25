@@ -1,7 +1,7 @@
 #env variable management
 from pydantic_settings import BaseSettings, SettingsConfigDict
 #data type enforcement
-from pydantic import RedisDsn, Field
+from pydantic import Field
 
 class Settings(BaseSettings):
     
@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     POOL_WORKERS: int | None = Field(default=None, ge=1, le=16)
     
     #redis cache config:
-    REDIS_URL: RedisDsn = "redis://localhost:6379/0"
+    REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_TTL_SECONDS: int = Field(
         default=3600,
         validation_alias="CACHE_TTL_SECONDS",
