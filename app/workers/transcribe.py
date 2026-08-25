@@ -69,9 +69,10 @@ class TranscriptionResult:
     redacted_text: str
     raw_text: str
     duration_ms: float
+    language: str | None = None
+    is_silent: bool = False
+    redaction_count: int = 0
     error: Optional[str] = None
-    language: str | None
-    is_silent: bool
 
 
 #incase input is a non-header-less, wrapped (wav) file, decode using this function.
