@@ -131,13 +131,13 @@ def _resolve_worker_count() -> int:
     """
     Defaults to CPU count minus one, reserving a core for the event
     loop / OS, with a floor of 1 so this doesn't break on a single-core
-    dev container. settings.WORKER_POOL_SIZE, if set, always overrides the
+    dev container. settings.POOL_WORKERS, if set, always overrides the
     computed default — useful for capping worker count in memory-
     limited deployments, since each worker holds its own full copy of
     the model in RAM.
     """
-    if settings.WORKER_POOL_SIZE is not None:
-        return max(1, settings.WORKER_POOL_SIZE)
+    if settings.POOL_WORKERS is not None:
+        return max(1, settings.POOL_WORKERS)
 
     cpu_count = os.cpu_count() or 2
     return max(1, cpu_count - 1) #=7
