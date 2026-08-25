@@ -49,6 +49,7 @@ class TranscriptResponse(BaseModel):
         """
         return cls(
             redacted_text=result.redacted_text,
+            redaction_count=result.redaction_count,
             language=result.language,
             duration_ms=result.duration_ms,
             is_silent=result.is_silent,
