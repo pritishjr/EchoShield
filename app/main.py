@@ -13,7 +13,7 @@ Run with:
 from __future__ import annotations
 
 from app.core.config import settings  
-from app.core.logging import setup_logging 
+from app.core._logging import setup_logging 
 
 setup_logging(level=settings.LOG_LEVEL)
 
