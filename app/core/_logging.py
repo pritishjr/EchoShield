@@ -7,14 +7,14 @@ import sys
 #importing the app base configurations
 from app.core.config import Settings
 
-def setup_logging(level) -> logging.Logger:
+def setup_logging(log_level) -> logging.Logger:
     
     #creating a custom logger
     logger = logging.getLogger("audio_logger")
     
     #checking is there is anything written about the logger.DEBUG in <settings>
     # and/or initializing + setting the logging levels.
-    log_level = logging.INFO
+    # log_level = logging.INFO
     
     logger.setLevel(level=log_level)
     
@@ -44,4 +44,5 @@ def setup_logging(level) -> logging.Logger:
     return logger
 
 # Expose a pre-configured logger instance
-logger = setup_logging()
+level = logging.INFO
+logger = setup_logging(log_level=level)
