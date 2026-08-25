@@ -15,7 +15,7 @@ from __future__ import annotations
 from app.core.config import settings  
 from app.core._logging import setup_logging 
 
-setup_logging(level=settings.LOG_LEVEL)
+setup_logging(log_level=settings.LOG_LEVEL)
 
 from fastapi import FastAPI  # noqa: E402
 

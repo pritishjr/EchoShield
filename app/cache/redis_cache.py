@@ -62,9 +62,10 @@ def create_redis_client() -> "redis.Redis":
             "it must be created exactly once, at startup."
         )
 
-    logger.info("creating redis client: %s", settings.REDIS_URL)
+    redis_url = str(settings.REDIS_URL)
+    logger.info("creating redis client: %s", redis_url)
     _client = redis.from_url(
-        settings.REDIS_URL, #database port
+        redis_url, #database port
         decode_responses=True,       # get back str, not bytes, from redis-py
         socket_connect_timeout=2.0,  # fail fast per-call rather than hang the event loop
         socket_timeout=2.0,
