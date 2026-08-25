@@ -8,7 +8,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1: builder
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim AS builder
+FROM python:3.11-slim AS builder
 
 # build-essential is defensive insurance, not a known hard requirement:
 # fastapi/uvicorn/pydantic/redis-py all ship prebuilt wheels, and so
@@ -39,7 +39,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 # ---------------------------------------------------------------------------
 # Stage 2: runtime
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim AS runtime
+FROM python:3.11-slim AS runtime
 
 # Runtime system dependencies — NOT build-time ones, so these belong
 # in this stage, not the builder:

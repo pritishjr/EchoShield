@@ -2,17 +2,16 @@
 services:
   app:
     build:
-      context: ..
+      context: .
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
     env_file:
-      - ../.env
+      - .env
     environment:
       MODEL_NAME: ${MODEL_NAME}
       DEVICE: ${DEVICE}
       COMPUTE_TYPE: ${COMPUTE_TYPE}
-      POOL_WORKERS: ${POOL_WORKERS}
       REDIS_URL: redis://redis:6379/0
       CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS}
       LOCAL_CACHE_MAX_SIZE: ${LOCAL_CACHE_MAX_SIZE}
