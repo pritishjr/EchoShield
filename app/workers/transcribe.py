@@ -67,12 +67,12 @@ class TranscriptionResult:
     it still contains unredacted PII.
     """
     redacted_text: str
-    raw_text: str
     duration_ms: float
     language: str | None = None
     is_silent: bool = False
     redaction_count: int = 0
     error: Optional[str] = None
+    raw_text: str | None = None
 
 
 #incase input is a non-header-less, wrapped (wav) file, decode using this function.
