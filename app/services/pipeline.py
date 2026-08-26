@@ -146,6 +146,7 @@ def _to_cache_entry(result: TranscriptionResult) -> dict[str, Any]:
     """
     return {
         "redacted_text": result.redacted_text,
+        "raw_text": result.raw_text,
         "redaction_count": result.redaction_count,
         "language": result.language,
         "is_silent": result.is_silent,
@@ -163,10 +164,11 @@ def _from_cache_entry(entry: dict[str, Any]) -> TranscriptionResult:
     """
     return TranscriptionResult(
         redacted_text=entry["redacted_text"],
-        redaction_count=entry["redaction_count"],
-        language=entry["language"],
+        raw_text=entry.get("raw_text"),
+        redaction_count=entry.get("redaction_count", 0),
+        language=entry.get("language"),
         duration_ms=0.0,
-        is_silent=entry["is_silent"],
+        is_silent=entry.get("is_silent", False),
     )
 
 
