@@ -59,7 +59,7 @@ class LocalCache:
         self._ttl_seconds = ttl_seconds #cache expiry
         self._store: "OrderedDict[str, tuple[float, dict[str, Any]]]" = OrderedDict() #cache data type: ordered dictionary as a key,value tuple.
 
-    def __getitem__(self, key: str) -> Optional[dict[str, Any]]:
+    def get(self, key: str) -> Optional[dict[str, Any]]:
         """Returns the value for the key. None if missing."""
         entry = self._store.get(key) #O(1) operation
         
@@ -87,7 +87,7 @@ class LocalCache:
         self._store.move_to_end(key) #reordering in O(1)
         return value
 
-    def __setitem__(self, key: str, value: dict[str, Any]) -> None:
+    def set(self, key: str, value: dict[str, Any]) -> None:
         """
         Inserts or overwrites an entry in cache. Evicts if the cache capacity hits maximum occupancy (_max_size) based on LRU approach.
         """
